@@ -1,0 +1,73 @@
+name: Sprites Claude Managed Agents
+description: Runs a Claude Managed Agents session in a Sprite.
+author: Fly.io
+
+branding:
+  icon: cpu
+  color: purple
+
+inputs:
+  agent-id:
+    description: Managed agent id
+    required: true
+  environment-id:
+    description: Managed agent environment id
+    required: true
+  api-key:
+    description: Anthropic API key
+    required: true
+  title:
+    description: Session title
+    default: ${{ github.repository }}#${{ github.run_id }}
+  prompt:
+    description: Initial user message
+  outcome:
+    description: Outcome for the agent to work toward, mutually exclusive with prompt
+  rubric:
+    description: Markdown rubric grading the outcome, required when outcome is set
+  max-iterations:
+    description: Revisions the outcome grader allows before giving up
+  labels:
+    description: Comma-separated labels to apply to the Sprite
+  budget-cents:
+    description: Maximum list cost of the session, in US cents
+  files:
+    description: Files to mount into the session, one "<local path> /<session path>" pair per line
+  bucket:
+    description: S3 bucket backing the presigned uploads, required when files is set
+  aws-access-key-id:
+    description: Access key for the upload bucket, required when files is set
+  aws-secret-access-key:
+    description: Secret key for the upload bucket, required when files is set
+  aws-endpoint-url:
+    description: S3 endpoint for the upload bucket
+  aws-region:
+    description: S3 region for the upload bucket
+  timeout:
+    description: Seconds to wait for the turn to complete
+    default: "1800"
+  archive-session:
+    description: Archive the session once the turn completes
+    default: "false"
+  delete-sprite:
+    description: Delete the Sprite once the turn completes, requires archive-session
+    default: "false"
+  cleanup-on-error:
+    description: Also archive the session and delete the Sprite when the step fails
+    default: "false"
+  pull-files:
+    description: Files to copy from the Sprite once the turn completes, one "<local path> /<Sprite path>" pair per line
+  sprite-token:
+    description: Sprites API token, required when delete-sprite or pull-files is set
+
+outputs:
+  session-id:
+    description: Managed agent session id
+  sprite:
+    description: Sprite backing the session
+  transcript:
+    description: Claude output transcript
+
+runs:
+  using: node24
+  main: dist/index.js

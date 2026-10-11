@@ -1,0 +1,16 @@
+{
+  "printWidth": 80,
+  "sortImports": {
+    "groups": [
+      ["value-builtin", "value-external"],
+      "value-internal",
+      ["value-parent", "value-sibling", "value-index"],
+      "type-import",
+      "type-internal",
+      ["type-parent", "type-sibling", "type-index"],
+      "unknown"
+    ],
+    "internalPattern": [":"]
+  },
+  "ignorePatterns": ["dist/"]
+}

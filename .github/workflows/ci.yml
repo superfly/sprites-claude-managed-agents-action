@@ -1,0 +1,124 @@
+name: Continuous Integration
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test-typescript:
+    name: TypeScript tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check format
+        run: npm run format:check
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+  check-dist:
+    name: Check dist/
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build dist/
+        run: npm run package
+
+      - name: Compare dist/
+        run: git diff --exit-code --ignore-space-at-eol --text dist/
+
+  test-action:
+    name: Test action
+    needs: [test-typescript, check-dist]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: >-
+      vars.CMA_ANTHROPIC_AGENT_ID != '' &&
+      (github.event_name == 'push' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Test local action
+        id: test-action
+        uses: ./
+        with:
+          api-key: ${{ secrets.CMA_ANTHROPIC_API_KEY }}
+          agent-id: ${{ vars.CMA_ANTHROPIC_AGENT_ID }}
+          environment-id: ${{ vars.CMA_ANTHROPIC_ENVIRONMENT_ID }}
+          title: CI smoke test
+          budget-cents: "25"
+          timeout: "300"
+          prompt: Reply with the single word "pong".
+          archive-session: "true"
+          delete-sprite: "true"
+          sprite-token: ${{ secrets.CMA_SPRITE_TOKEN }}
+
+      - name: Check transcript
+        env:
+          TRANSCRIPT: ${{ steps.test-action.outputs.transcript }}
+        run: printf '%s\n' "$TRANSCRIPT" | grep -v '^> ' | grep -qi pong
+
+      - name: Summarize
+        if: ${{ !cancelled() && steps.test-action.outputs.session-id != '' }}
+        env:
+          SESSION_ID: ${{ steps.test-action.outputs.session-id }}
+          SPRITE: ${{ steps.test-action.outputs.sprite }}
+          TRANSCRIPT: ${{ steps.test-action.outputs.transcript }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ### Transcript of session \`$SESSION_ID\` in Sprite \`$SPRITE\`
+
+          <pre>
+          $(printf '%s\n' "$TRANSCRIPT" | sed 's|&|\&amp;|g; s|<|\&lt;|g')
+          </pre>
+          EOF

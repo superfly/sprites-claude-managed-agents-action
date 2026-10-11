@@ -1,0 +1,22 @@
+{
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error"
+  },
+  "rules": {
+    "typescript/no-non-null-assertion": "error",
+    "typescript/promise-function-async": "warn"
+  },
+  "env": {
+    "node": true
+  },
+  "ignorePatterns": ["dist/"],
+  "overrides": [
+    {
+      "files": ["*.test.ts"],
+      "rules": {
+        "typescript/no-unsafe-type-assertion": "off"
+      }
+    }
+  ]
+}
