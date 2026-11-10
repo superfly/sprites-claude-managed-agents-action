@@ -1,0 +1,83 @@
+name: Smoke Test
+
+on:
+  workflow_call:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit to test
+        required: true
+
+permissions:
+  contents: read
+  statuses: write
+
+jobs:
+  test-action:
+    name: Test action
+    if: vars.CMA_ANTHROPIC_AGENT_ID != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Report pending status
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA"
+              -f state=pending -f context="Test action (manual)" -f target_url="$TARGET_URL"
+
+      - name: Checkout
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+          persist-credentials: false
+
+      - name: Test local action
+        id: test-action
+        uses: ./
+        with:
+          api-key: ${{ secrets.CMA_ANTHROPIC_API_KEY }}
+          agent-id: ${{ vars.CMA_ANTHROPIC_AGENT_ID }}
+          environment-id: ${{ vars.CMA_ANTHROPIC_ENVIRONMENT_ID }}
+          title: CI smoke test
+          budget-cents: "25"
+          timeout: "300"
+          prompt: Reply with the single word "pong".
+          archive-session: "true"
+          delete-sprite: "true"
+          sprite-token: ${{ secrets.CMA_SPRITE_TOKEN }}
+
+      - name: Check transcript
+        env:
+          TRANSCRIPT: ${{ steps.test-action.outputs.transcript }}
+        run: printf '%s\n' "$TRANSCRIPT" | grep -v '^> ' | grep -qi pong
+
+      - name: Summarize
+        if: ${{ !cancelled() && steps.test-action.outputs.session-id != '' }}
+        env:
+          SESSION_ID: ${{ steps.test-action.outputs.session-id }}
+          SPRITE: ${{ steps.test-action.outputs.sprite }}
+          TRANSCRIPT: ${{ steps.test-action.outputs.transcript }}
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ### Transcript of session \`$SESSION_ID\` in Sprite \`$SPRITE\`
+
+          <pre>
+          $(printf '%s\n' "$TRANSCRIPT" | sed 's|&|\&amp;|g; s|<|\&lt;|g')
+          </pre>
+          EOF
+
+      - name: Report final status
+        if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha }}
+          STATE: ${{ job.status == 'cancelled' && 'error' || job.status }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: >-
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA"
+              -f state="$STATE" -f context="Test action (manual)" -f target_url="$TARGET_URL"
